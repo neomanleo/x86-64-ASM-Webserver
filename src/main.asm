@@ -112,13 +112,13 @@ OK: ; 200
   ; no touch r14, r15
   mov rdi, path
   mov rsi, o_rdonly
-  mov rax, open ; open index.html
+  mov rax, open ; open 200.html
   syscall
 
   cmp rax, -1
   je err_exit
 
-  mov r13, rax ; r13 is the fd for index.html
+  mov r13, rax ; r13 is the fd for 200.html
 
   mov rdi, r13
   mov rsi, output_buf
