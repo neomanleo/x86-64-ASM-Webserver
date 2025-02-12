@@ -24,6 +24,17 @@
 
   BUF_SIZE equ 1500
 
+zero_buf:
+  loop:
+
+    mov [output_buf+rcx-1], dil
+    dec rcx
+
+    cmp rcx, 0
+    jne loop
+
+    ret
+
 _start:
   mov rdi, af_inet
   mov rsi, sock_stream
@@ -79,9 +90,9 @@ accept_loop:
 strcmp:
   mov al, [input_buf+r12]
   mov dl, [route+r12]
-  
+
   inc r12
-  
+
   cmp al, dl
   je strcmp
   cmp rax, rdx
@@ -98,7 +109,7 @@ OK: ; 200
   mov rax, 1 ; write input_buf to stdout
   syscall
 
-; no touch r14, r15
+  ; no touch r14, r15
   mov rdi, path
   mov rsi, o_rdonly
   mov rax, open ; open index.html
@@ -106,7 +117,7 @@ OK: ; 200
 
   cmp rax, -1
   je err_exit
-  
+
   mov r13, rax ; r13 is the fd for index.html
 
   mov rdi, r13
@@ -118,10 +129,17 @@ OK: ; 200
   cmp rax, -1
   je err_exit
 
+  mov rdi, r13
+  mov rax, close
+  syscall ; close 200.html
+
+  cmp rax, -1
+  je err_exit
+
   mov rdi, r14
   mov rsi, output_buf
   mov rdx, BUF_SIZE
-  mov rax, write ; write output_buf (index.html) to client fd (r14)
+  mov rax, write ; write output_buf (200.html) to client fd (r14)
   syscall
 
   cmp rax, -1
@@ -131,7 +149,17 @@ OK: ; 200
   mov rax, close
   syscall
 
-  jmp suc_exit
+  push rdx
+  push rcx
+
+  xor dil, dil ; arg 1
+  mov rcx, 1500 ; arg 2
+  call zero_buf
+
+  pop rcx
+  pop rdx
+
+  jmp exit_cond
 
 NF: ; 404
   cmp r12, 7
@@ -147,22 +175,29 @@ NF: ; 404
   mov rax, 1 ; write input_buf to stdout
   syscall
 
-; no touch r14, r15
+  ; no touch r14, r15
   mov rdi, badpath
   mov rsi, o_rdonly
-  mov rax, open ; open index.html
+  mov rax, open ; open 400.html
   syscall
 
   cmp rax, -1
   je err_exit
-  
-  mov r13, rax ; r13 is the fd for index.html
+
+  mov r13, rax ; r13 is the fd for 400.html
 
   mov rdi, r13
   mov rsi, output_buf
   mov rdx, BUF_SIZE
-  mov rax, read ; read 1500 bytes from 200.html into output buf
+  mov rax, read ; read 1500 bytes from 400.html into output buf
   syscall
+
+  cmp rax, -1
+  je err_exit
+
+  mov rdi, r13
+  mov rax, close
+  syscall ; close 400.html
 
   cmp rax, -1
   je err_exit
@@ -170,7 +205,7 @@ NF: ; 404
   mov rdi, r14
   mov rsi, output_buf
   mov rdx, BUF_SIZE
-  mov rax, write ; write output_buf (index.html) to client fd (r14)
+  mov rax, write ; write output_buf (400.html) to client fd (r14)
   syscall
 
   cmp rax, -1
@@ -180,9 +215,20 @@ NF: ; 404
   mov rax, close
   syscall
 
-inc r12
-cmp r12, 5
-jne accept_loop
+  push rdx
+  push rcx
+
+  xor dil, dil ; arg 1
+  mov rcx, 1500 ; arg 2
+  call zero_buf
+
+  pop rcx
+  pop rdx
+
+exit_cond:
+  inc r12
+  cmp r12, 100 ; loop 100 times
+  jne accept_loop
 
 suc_exit:
   mov rdi, r15 ; close sock fd
@@ -207,8 +253,8 @@ err_exit:
   section .data
 
   err_msg db "Error. Exiting...", 0
-  input_buf times BUF_SIZE*5 db 0, 
-  output_buf times BUF_SIZE+1 db 0,
+  input_buf times BUF_SIZE db 0, 
+  output_buf times BUF_SIZE db 0,
   route db "GET / "
   badpath db "404.html", 0
   path db "200.html", 0
